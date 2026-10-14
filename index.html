@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VOD Overcharge Reconciliation Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        lightBg: '#f1f5f9',
+                        lightSurface: '#ffffff',
+                        lightBorder: '#e2e8f0',
+                        lightText: '#1e293b',
+                        darkBg: '#090d16',
+                        darkSurface: '#111827',
+                        darkBorder: '#1f2937',
+                        darkText: '#f3f4f6'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(4px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in {
+            animation: fadeIn 0.2s ease-out forwards;
+        }
+    </style>
+</head>
+<body class="bg-lightBg dark:bg-darkBg text-lightText dark:text-darkText transition-colors duration-200 min-h-screen font-sans antialiased flex flex-col">
+
+    <!-- Material Design Header Bar -->
+    <header class="bg-lightSurface dark:bg-darkSurface border-b border-lightBorder dark:border-darkBorder shadow-sm sticky top-0 z-30 transition-colors duration-200">
+        <div class="w-full px-6 py-4 flex flex-col sm:flex-row justify-between items-center gap-4">
+            <div class="flex items-center gap-3">
+                <div class="p-2.5 bg-indigo-600/10 dark:bg-indigo-600/20 border border-indigo-500/30 rounded-2xl text-indigo-600 dark:text-indigo-400 shadow-sm">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+                </div>
+                <div>
+                    <h1 class="text-lg font-bold tracking-tight flex items-center gap-2">
+                        VOD Overcharge Reconciliation Dashboard
+                        <span class="bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wider">M3 Material</span>
+                    </h1>
+                    <p class="text-xs text-slate-500 dark:text-slate-400">Automated billing audit & advanced data workspace.</p>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-3">
+                <!-- Theme Toggle Button -->
+                <button onclick="toggleTheme()" class="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 transition-all shadow-sm flex items-center justify-center" title="Toggle Soft Light/Dark Mode">
+                    <svg id="theme-icon-sun" class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+                    <svg id="theme-icon-moon" class="w-4 h-4 hidden text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+                </button>
+
+                <!-- Material Tab Switcher -->
+                <div class="flex bg-slate-200/70 dark:bg-slate-950 p-1 rounded-2xl border border-slate-300 dark:border-slate-800 shadow-inner">
+                    <button onclick="switchTab('audit')" id="tab-audit" class="px-5 py-2 text-xs font-semibold rounded-xl transition-all bg-indigo-600 text-white shadow">VOD Audit Dashboard</button>
+                    <button onclick="switchTab('explorer')" id="tab-explorer" class="px-5 py-2 text-xs font-semibold rounded-xl transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white">Full Data Explorer</button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="w-full px-6 py-6 flex-1 flex flex-col gap-6 transition-colors duration-200">
+
+        <!-- Material File Upload Card -->
+        <div class="bg-lightSurface dark:bg-darkSurface border border-lightBorder dark:border-darkBorder rounded-3xl p-5 shadow-sm transition-colors duration-200">
+            <div class="flex flex-col md:flex-row items-center justify-between gap-6">
+                <div class="space-y-1 text-center md:text-left">
+                    <h2 class="text-sm font-semibold flex items-center gap-2 justify-center md:justify-start">
+                        Upload Payment Report
+                        <span id="file-status-tag" class="hidden bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-[10px] font-medium px-2.5 py-0.5 rounded-full">Report Loaded</span>
+                    </h2>
+                    <p class="text-xs text-slate-500 dark:text-slate-400">Upload your exported Excel payment report (.xlsx, .xls) to run the automated rules engine.</p>
+                </div>
+                <div class="w-full md:w-auto">
+                    <label class="flex flex-col items-center justify-center w-full md:w-80 h-24 border-2 border-indigo-500/30 border-dashed rounded-2xl cursor-pointer bg-slate-50 dark:bg-slate-950/40 hover:bg-indigo-50/50 dark:hover:bg-slate-950 hover:border-indigo-500 transition-all group shadow-sm">
+                        <div class="flex flex-col items-center justify-center pt-3 pb-3 px-4">
+                            <svg class="w-6 h-6 mb-1 text-indigo-500 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+                            <p class="mb-0.5 text-xs font-medium"><span class="text-indigo-600 dark:text-indigo-400">Click to upload</span> or drag & drop</p>
+                            <p id="file-name-display" class="text-[10px] text-slate-400 dark:text-slate-500">Excel files (.xlsx, .xls)</p>
+                        </div>
+                        <input id="excel-file" type="file" class="hidden" accept=".xlsx, .xls" onchange="handleFileUpload(event)" />
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 1: VOD AUDIT DASHBOARD -->
+        <div id="view-audit" class="space-y-6 flex-1 flex flex-col animate-fade-in">
+            <!-- Metrics Cards -->
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div class="bg-lightSurface dark:bg-darkSurface border-t-4 border-indigo-500 border-x border-b border-lightBorder dark:border-darkBorder rounded-3xl p-5 shadow-sm relative overflow-hidden transition-colors duration-200">
+                    <p class="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Total Rows Scanned</p>
+                    <p id="stat-total-rows" class="text-3xl font-extrabold mt-2">0</p>
+                </div>
+
+                <div class="bg-lightSurface dark:bg-darkSurface border-t-4 border-rose-500 border-x border-b border-lightBorder dark:border-darkBorder rounded-3xl p-5 shadow-sm relative overflow-hidden transition-colors duration-200">
+                    <p class="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Overcharge Exceptions</p>
+                    <p id="stat-exceptions" class="text-3xl font-extrabold text-rose-500 dark:text-rose-400 mt-2">0</p>
+                </div>
+
+                <div class="bg-lightSurface dark:bg-darkSurface border-t-4 border-emerald-500 border-x border-b border-lightBorder dark:border-darkBorder rounded-3xl p-5 shadow-sm relative overflow-hidden transition-colors duration-200">
+                    <p class="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Total Refund / Credit Value</p>
+                    <p id="stat-refund-total" class="text-3xl font-extrabold text-emerald-600 dark:text-emerald-400 mt-2">$0.00</p>
+                </div>
+            </div>
+
+            <!-- Audit Table Section -->
+            <div class="bg-lightSurface dark:bg-darkSurface border border-lightBorder dark:border-darkBorder rounded-3xl shadow-sm overflow-hidden flex-1 flex flex-col transition-colors duration-200">
+                <div class="p-4 border-b border-lightBorder dark:border-darkBorder flex flex-col sm:flex-row justify-between items-center gap-4">
+                    <div>
+                        <h3 class="text-sm font-semibold">Audit Exception Results</h3>
+                        <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Customers charged for VOD despite having active 250MB/500MB + TV bundle.</p>
+                    </div>
+
+                    <!-- Dual Export Dropdown -->
+                    <div class="relative">
+                        <button onclick="toggleExportDropdown()" id="btn-export" disabled class="bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-400 dark:disabled:text-slate-600 text-white font-medium px-4 py-2 rounded-2xl text-xs transition-all shadow-sm flex items-center gap-2 cursor-pointer disabled:cursor-not-allowed">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                            Export Audit Report
+                            <svg class="w-3 h-3 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                        </button>
+                        <div id="export-dropdown" class="hidden absolute right-0 mt-2 w-48 bg-lightSurface dark:bg-darkSurface border border-lightBorder dark:border-darkBorder rounded-2xl shadow-xl p-1.5 z-50 text-xs">
+                            <button onclick="exportAudit('excel')" class="w-full text-left px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-between">
+                                <span>Excel Workbook (.xlsx)</span>
+                                <span class="text-[10px] bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 px-1.5 py-0.5 rounded">XLSX</span>
+                            </button>
+                            <button onclick="exportAudit('csv')" class="w-full text-left px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-between">
+                                <span>CSV Format (.csv)</span>
+                                <span class="text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-1.5 py-0.5 rounded">CSV</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="overflow-auto max-h-[60vh] flex-1">
+                    <table class="w-full text-left border-collapse text-xs">
+                        <thead class="bg-slate-100 dark:bg-slate-950 sticky top-0 text-slate-500 dark:text-slate-400 uppercase tracking-wider border-b border-lightBorder dark:border-darkBorder z-10">
+                            <tr>
+                                <th class="p-3.5 font-semibold">Client Code</th>
+                                <th class="p-3.5 font-semibold">Receipt ID</th>
+                                <th class="p-3.5 font-semibold">Entry Date</th>
+                                <th class="p-3.5 font-semibold">Service</th>
+                                <th class="p-3.5 font-semibold">Service Type</th>
+                                <th class="p-3.5 font-semibold">Amount Charged</th>
+                                <th class="p-3.5 font-semibold">Audit Flag</th>
+                            </tr>
+                        </thead>
+                        <tbody id="audit-table-body" class="divide-y divide-lightBorder dark:divide-darkBorder text-slate-700 dark:text-slate-300">
+                            <tr><td colspan="7" class="p-12 text-center text-slate-400">Upload an Excel report above to initiate automated reconciliation.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 2: FULL RAW DATA EXPLORER -->
+        <div id="view-explorer" class="hidden space-y-4 flex-1 flex flex-col animate-fade-in">
+            <div class="bg-lightSurface dark:bg-darkSurface border border-lightBorder dark:border-darkBorder rounded-3xl p-4 shadow-sm flex flex-wrap items-center justify-between gap-4 transition-colors duration-200">
+                <div class="flex flex-wrap items-center gap-3 w-full lg:w-auto flex-1">
+                    <div class="relative flex-1 min-w-[220px]">
+                        <span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                        </span>
+                        <input type="text" id="explorer-search" oninput="applyExplorerFilters()" placeholder="Search all raw data..." class="w-full bg-slate-50 dark:bg-slate-950 border border-lightBorder dark:border-darkBorder rounded-2xl pl-9 pr-3 py-2 text-xs focus:outline-none focus:border-indigo-500 shadow-inner">
+                    </div>
+
+                    <div class="flex items-center gap-2">
+                        <select id="filter-col-select" onchange="updateFilterValOptions()" class="bg-slate-50 dark:bg-slate-950 border border-lightBorder dark:border-darkBorder rounded-2xl px-3 py-2 text-xs focus:outline-none focus:border-indigo-500">
+                            <option value="">Filter by Column...</option>
+                        </select>
+                        <select id="filter-val-select" onchange="applyExplorerFilters()" class="bg-slate-50 dark:bg-slate-950 border border-lightBorder dark:border-darkBorder rounded-2xl px-3 py-2 text-xs focus:outline-none focus:border-indigo-500 max-w-[150px]">
+                            <option value="">All Values</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-2.5">
+                    <button onclick="resetExplorerFilters()" class="bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-medium px-3.5 py-2 rounded-2xl border border-lightBorder dark:border-darkBorder transition-all flex items-center gap-1.5">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                        Reset
+                    </button>
+
+                    <div class="relative">
+                        <button onclick="toggleColumnDropdown()" class="bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 font-medium text-xs px-3.5 py-2 rounded-2xl border border-lightBorder dark:border-darkBorder flex items-center gap-2 transition-all shadow-sm">
+                            <svg class="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"/></svg>
+                            Columns
+                        </button>
+                        <div id="column-dropdown" class="hidden absolute right-0 mt-2 w-64 bg-lightSurface dark:bg-darkSurface border border-lightBorder dark:border-darkBorder rounded-3xl shadow-xl p-4 z-50 max-h-72 overflow-y-auto space-y-2">
+                            <div class="flex justify-between items-center pb-2 border-b border-lightBorder dark:border-darkBorder text-[11px] text-slate-400 font-bold uppercase">
+                                <span>Toggle Columns</span>
+                                <button onclick="toggleAllColumns(true)" class="text-indigo-600 dark:text-indigo-400 hover:underline">Select All</button>
+                            </div>
+                            <div id="column-checkboxes" class="space-y-1 pt-1"></div>
+                        </div>
+                    </div>
+
+                    <button onclick="exportFilteredExplorerData()" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium px-4 py-2 rounded-2xl transition-all shadow-sm flex items-center gap-1.5">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                        Export View
+                    </button>
+                </div>
+            </div>
+
+            <div class="bg-lightSurface dark:bg-darkSurface border border-lightBorder dark:border-darkBorder rounded-3xl shadow-sm overflow-hidden flex-1 flex flex-col transition-colors duration-200">
+                <div class="px-5 py-3 bg-slate-50 dark:bg-slate-950/60 border-b border-lightBorder dark:border-darkBorder flex flex-wrap items-center justify-between text-xs text-slate-500 dark:text-slate-400 gap-4">
+                    <div class="flex items-center gap-4">
+                        <span id="explorer-record-count" class="font-semibold text-slate-700 dark:text-white">0 records found</span>
+                        <span id="explorer-sum-display" class="hidden text-indigo-600 dark:text-indigo-300 font-medium bg-indigo-500/10 px-2.5 py-0.5 rounded-full border border-indigo-500/20"></span>
+                    </div>
+                    <span class="text-[11px] text-slate-400">Tip: Click any table header to sort.</span>
+                </div>
+
+                <div class="overflow-auto max-h-[62vh] flex-1 text-xs">
+                    <table class="w-full text-left border-collapse whitespace-nowrap">
+                        <thead id="explorer-table-head" class="bg-slate-100 dark:bg-slate-950 sticky top-0 text-slate-500 dark:text-slate-400 uppercase tracking-wider border-b border-lightBorder dark:border-darkBorder z-10">
+                            <tr><th class="p-3 text-slate-400">No data loaded</th></tr>
+                        </thead>
+                        <tbody id="explorer-table-body" class="divide-y divide-lightBorder dark:divide-darkBorder text-slate-700 dark:text-slate-300">
+                            <tr><td class="p-12 text-center text-slate-400">Upload an Excel report above to explore raw data.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        let rawData = [];
+        let globalHeaders = [];
+        let selectedColumns = new Set();
+        let currentExceptions = [];
+        let currentExplorerFilteredData = [];
+        let currentSortColumn = null;
+        let currentSortDirection = 'asc';
+
+        // --- Theme Engine (Soft Light / Dark Mode) ---
+        function toggleTheme() {
+            const html = document.documentElement;
+            const sunIcon = document.getElementById('theme-icon-sun');
+            const moonIcon = document.getElementById('theme-icon-moon');
+            
+            if (html.classList.contains('dark')) {
+                html.classList.remove('dark');
+                sunIcon.classList.add('hidden');
+                moonIcon.classList.remove('hidden');
+                localStorage.setItem('vod_theme', 'light');
+            } else {
+                html.classList.add('dark');
+                sunIcon.classList.remove('hidden');
+                moonIcon.classList.add('hidden');
+                localStorage.setItem('vod_theme', 'dark');
+            }
+        }
+
+        // Initialize saved theme
+        if (localStorage.getItem('vod_theme') === 'light') {
+            document.documentElement.classList.remove('dark');
+            document.getElementById('theme-icon-sun').classList.add('hidden');
+            document.getElementById('theme-icon-moon').classList.remove('hidden');
+        }
+
+        // --- Tab Switcher ---
+        function switchTab(tab) {
+            const auditView = document.getElementById('view-audit');
+            const explorerView = document.getElementById('view-explorer');
+            const tabAudit = document.getElementById('tab-audit');
+            const tabExplorer = document.getElementById('tab-explorer');
+
+            if (tab === 'audit') {
+                auditView.classList.remove('hidden');
+                explorerView.classList.add('hidden');
+                tabAudit.className = "px-5 py-2 text-xs font-semibold rounded-xl transition-all bg-indigo-600 text-white shadow";
+                tabExplorer.className = "px-5 py-2 text-xs font-semibold rounded-xl transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white";
+            } else {
+                auditView.classList.add('hidden');
+                explorerView.classList.remove('hidden');
+                tabExplorer.className = "px-5 py-2 text-xs font-semibold rounded-xl transition-all bg-indigo-600 text-white shadow";
+                tabAudit.className = "px-5 py-2 text-xs font-semibold rounded-xl transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white";
+                if (rawData.length > 0 && currentExplorerFilteredData.length === 0) {
+                    currentExplorerFilteredData = [...rawData];
+                    populateFilterColSelect();
+                    renderExplorerTable(currentExplorerFilteredData);
+                }
+            }
+        }
+
+        function convertExcelDate(val) {
+            if (!val && val !== 0) return '';
+            if (typeof val === 'number' && val > 20000 && val < 60000) {
+                const excelEpoch = new Date(1899, 11, 30);
+                const jsDate = new Date(excelEpoch.getTime() + val * 86400000);
+                return jsDate.toISOString().replace('T', ' ').substring(0, 16);
+            }
+            return String(val);
+        }
+
+        // --- File Upload & Parsing ---
+        function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            document.getElementById('file-name-display').innerText = file.name;
+            document.getElementById('file-status-tag').classList.remove('hidden');
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+                    const jsonRows = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+
+                    if (jsonRows.length === 0) {
+                        alert("The uploaded Excel file is empty.");
+                        return;
+                    }
+
+                    globalHeaders = Object.keys(jsonRows[0]);
+                    selectedColumns = new Set(globalHeaders);
+                    rawData = jsonRows;
+                    currentExplorerFilteredData = [...rawData];
+
+                    buildColumnCheckboxes();
+                    populateFilterColSelect();
+                    runVODAudit();
+                    renderExplorerTable(currentExplorerFilteredData);
+                } catch (err) {
+                    console.error(err);
+                    alert("Error parsing Excel file. Please ensure it's a valid spreadsheet.");
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        // --- VOD Audit Engine ---
+        function runVODAudit() {
+            document.getElementById('stat-total-rows').innerText = rawData.length.toLocaleString();
+
+            const processedRows = rawData.map((row, index) => {
+                const service = String(row['Service'] || '').trim();
+                const serviceType = String(row['Service Type'] || '').trim();
+                const clientCode = String(row['Client Code'] || '').trim();
+                const contract = String(row['Contract'] || '').trim();
+                const receiptId = String(row['Receipt ID'] || '').trim();
+                const amount = parseFloat(row['Amount']) || 0;
+                const entryDate = convertExcelDate(row['Entry Date']);
+
+                const isQualifyingInternet = ['infinity 1299', 'infinity 1699'].includes(serviceType.toLowerCase());
+                const isTvService = ['subscription gtv', 'subscription dtv'].includes(service.toLowerCase());
+                const isVodService = serviceType.toLowerCase() === 'vod';
+
+                return {
+                    originalIndex: index,
+                    rowObj: row,
+                    clientCode,
+                    contract,
+                    receiptId,
+                    entryDate,
+                    service,
+                    serviceType,
+                    amount,
+                    isQualifyingInternet,
+                    isTvService,
+                    isVodService
+                };
+            });
+
+            const groups = {};
+            processedRows.forEach(r => {
+                if (!r.clientCode || !r.receiptId) return;
+                const key = `${r.clientCode}_${r.receiptId}`;
+                if (!groups[key]) groups[key] = [];
+                groups[key].push(r);
+            });
+
+            const exceptions = [];
+
+            Object.values(groups).forEach(group => {
+                const hasInternet = group.some(g => g.isQualifyingInternet);
+                const hasTv = group.some(g => g.isTvService);
+                const hasChargedVod = group.some(g => g.isVodService && g.amount > 0);
+
+                if (hasInternet && hasTv && hasChargedVod) {
+                    group.filter(g => g.isVodService && g.amount > 0).forEach(vodRow => {
+                        exceptions.push({
+                            ...vodRow.rowObj,
+                            'Entry Date': vodRow.entryDate,
+                            'Audit Flag': 'Refund Required: VOD charged on active 250MB/500MB + TV bundle'
+                        });
+                    });
+                }
+            });
+
+            currentExceptions = exceptions;
+            document.getElementById('stat-exceptions').innerText = exceptions.length.toLocaleString();
+
+            const totalSum = exceptions.reduce((acc, curr) => acc + (parseFloat(curr['Amount']) || 0), 0);
+            document.getElementById('stat-refund-total').innerText = `$${totalSum.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+
+            const btnExport = document.getElementById('btn-export');
+            if (exceptions.length > 0) btnExport.removeAttribute('disabled');
+            else btnExport.setAttribute('disabled', 'true');
+
+            renderAuditTable(exceptions);
+        }
+
+        function renderAuditTable(exceptions) {
+            const tbody = document.getElementById('audit-table-body');
+            if (exceptions.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" class="p-12 text-center text-slate-400">No VOD overcharge exceptions found.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = exceptions.map(ex => `
+                <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+                    <td class="p-3.5 font-medium">${ex['Client Code'] || ''}</td>
+                    <td class="p-3.5">${ex['Receipt ID'] || ''}</td>
+                    <td class="p-3.5 text-slate-500 dark:text-slate-400">${ex['Entry Date'] || ''}</td>
+                    <td class="p-3.5">${ex['Service'] || ''}</td>
+                    <td class="p-3.5 text-indigo-600 dark:text-indigo-300 font-medium">${ex['Service Type'] || ''}</td>
+                    <td class="p-3.5 font-semibold text-rose-500 dark:text-rose-400">$${Number(ex['Amount'] || 0).toFixed(2)}</td>
+                    <td class="p-3.5"><span class="bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 text-xs px-2.5 py-1 rounded-full">${ex['Audit Flag']}</span></td>
+                </tr>
+            `).join('');
+        }
+
+        function toggleExportDropdown() {
+            document.getElementById('export-dropdown').classList.toggle('hidden');
+        }
+
+        function exportAudit(format) {
+            if (currentExceptions.length === 0) return;
+            const worksheet = XLSX.utils.json_to_sheet(currentExceptions);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "VOD Audit Exceptions");
+            
+            if (format === 'csv') {
+                XLSX.writeFile(workbook, "vod_refund_audit_report.csv", { bookType: 'csv' });
+            } else {
+                XLSX.writeFile(workbook, "vod_refund_audit_report.xlsx");
+            }
+        }
+
+        // --- Advanced Raw Data Explorer ---
+        function buildColumnCheckboxes() {
+            const container = document.getElementById('column-checkboxes');
+            container.innerHTML = globalHeaders.map(h => `
+                <label class="flex items-center gap-2 px-2 py-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer text-xs">
+                    <input type="checkbox" value="${h}" ${selectedColumns.has(h) ? 'checked' : ''} onchange="handleColumnToggle(this)" class="rounded bg-slate-100 dark:bg-slate-950 border-slate-300 dark:border-slate-700 text-indigo-600">
+                    <span class="truncate" title="${h}">${h}</span>
+                </label>
+            `).join('');
+        }
+
+        function toggleColumnDropdown() {
+            document.getElementById('column-dropdown').classList.toggle('hidden');
+        }
+
+        function handleColumnToggle(checkbox) {
+            if (checkbox.checked) selectedColumns.add(checkbox.value);
+            else selectedColumns.delete(checkbox.value);
+            renderExplorerTable(currentExplorerFilteredData);
+        }
+
+        function toggleAllColumns(select) {
+            selectedColumns = select ? new Set(globalHeaders) : new Set();
+            buildColumnCheckboxes();
+            renderExplorerTable(currentExplorerFilteredData);
+        }
+
+        function populateFilterColSelect() {
+            const select = document.getElementById('filter-col-select');
+            select.innerHTML = `<option value="">Filter by Column...</option>` + 
+                globalHeaders.map(h => `<option value="${h}">${h}</option>`).join('');
+        }
+
+        function updateFilterValOptions() {
+            const col = document.getElementById('filter-col-select').value;
+            const valSelect = document.getElementById('filter-val-select');
+            if (!col) {
+                valSelect.innerHTML = `<option value="">All Values</option>`;
+                applyExplorerFilters();
+                return;
+            }
+
+            const uniqueVals = [...new Set(rawData.map(row => String(row[col] !== undefined ? row[col] : '')))].sort();
+            valSelect.innerHTML = `<option value="">All Values (${uniqueVals.length})</option>` +
+                uniqueVals.map(v => `<option value="${v}">${v || '(Blank)'}</option>`).join('');
+            
+            applyExplorerFilters();
+        }
+
+        function applyExplorerFilters() {
+            const query = document.getElementById('explorer-search').value.toLowerCase();
+            const filterCol = document.getElementById('filter-col-select').value;
+            const filterVal = document.getElementById('filter-val-select').value;
+
+            let filtered = rawData.filter(row => {
+                const matchesGlobal = !query || Object.values(row).some(val => String(val).toLowerCase().includes(query));
+                let matchesCol = true;
+                if (filterCol) {
+                    const rowVal = String(row[filterCol] !== undefined ? row[filterCol] : '');
+                    matchesCol = (filterVal === "" || rowVal === filterVal);
+                }
+                return matchesGlobal && matchesCol;
+            });
+
+            if (currentSortColumn) {
+                filtered.sort((a, b) => {
+                    let valA = a[currentSortColumn];
+                    let valB = b[currentSortColumn];
+                    if (!isNaN(valA) && !isNaN(valB)) {
+                        valA = Number(valA);
+                        valB = Number(valB);
+                    } else {
+                        valA = String(valA).toLowerCase();
+                        valB = String(valB).toLowerCase();
+                    }
+                    if (valA < valB) return currentSortDirection === 'asc' ? -1 : 1;
+                    if (valA > valB) return currentSortDirection === 'asc' ? 1 : -1;
+                    return 0;
+                });
+            }
+
+            currentExplorerFilteredData = filtered;
+            renderExplorerTable(filtered);
+        }
+
+        function resetExplorerFilters() {
+            document.getElementById('explorer-search').value = '';
+            document.getElementById('filter-col-select').value = '';
+            document.getElementById('filter-val-select').innerHTML = `<option value="">All Values</option>`;
+            currentSortColumn = null;
+            currentSortDirection = 'asc';
+            currentExplorerFilteredData = [...rawData];
+            renderExplorerTable(currentExplorerFilteredData);
+        }
+
+        function sortExplorerTable(column) {
+            if (currentSortColumn === column) {
+                currentSortDirection = currentSortDirection === 'asc' ? 'desc' : 'asc';
+            } else {
+                currentSortColumn = column;
+                currentSortDirection = 'asc';
+            }
+            applyExplorerFilters();
+        }
+
+        function renderExplorerTable(dataToRender) {
+            const thead = document.getElementById('explorer-table-head');
+            const tbody = document.getElementById('explorer-table-body');
+            const countLabel = document.getElementById('explorer-record-count');
+            const sumDisplay = document.getElementById('explorer-sum-display');
+
+            countLabel.innerText = `${dataToRender.length.toLocaleString()} of ${rawData.length.toLocaleString()} record(s) displayed`;
+
+            let numericSum = 0;
+            let hasNumericCol = false;
+            if (dataToRender.length > 0 && selectedColumns.has('Amount')) {
+                numericSum = dataToRender.reduce((acc, row) => acc + (parseFloat(row['Amount']) || 0), 0);
+                hasNumericCol = true;
+            }
+
+            if (hasNumericCol) {
+                sumDisplay.classList.remove('hidden');
+                sumDisplay.innerText = `Total Amount Sum: $${numericSum.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+            } else {
+                sumDisplay.classList.add('hidden');
+            }
+
+            const activeHeaders = globalHeaders.filter(h => selectedColumns.has(h));
+
+            if (!dataToRender || dataToRender.length === 0 || activeHeaders.length === 0) {
+                thead.innerHTML = `<tr><th class="p-3 text-slate-400">No columns selected or no records match filters</th></tr>`;
+                tbody.innerHTML = `<tr><td class="p-12 text-center text-slate-400">No data available for the current filter criteria.</td></tr>`;
+                return;
+            }
+
+            thead.innerHTML = `<tr>${activeHeaders.map(h => {
+                let sortArrow = '';
+                if (currentSortColumn === h) {
+                    sortArrow = currentSortDirection === 'asc' ? ' ▲' : ' ▼';
+                }
+                return `<th class="p-3 font-semibold cursor-pointer hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors select-none" onclick="sortExplorerTable('${h}')">${h}${sortArrow}</th>`;
+            }).join('')}</tr>`;
+            
+            const limitRows = dataToRender.slice(0, 400);
+            tbody.innerHTML = limitRows.map(row => `
+                <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+                    ${activeHeaders.map(h => {
+                        let val = row[h];
+                        if (h.toLowerCase().includes('date')) val = convertExcelDate(val);
+                        const displayVal = val !== undefined && val !== null ? String(val) : '';
+                        return `<td class="p-3 max-w-[250px] truncate" title="${displayVal}">${displayVal}</td>`;
+                    }).join('')}
+                </tr>
+            `).join('');
+        }
+
+        function exportFilteredExplorerData() {
+            if (currentExplorerFilteredData.length === 0) return;
+            const worksheet = XLSX.utils.json_to_sheet(currentExplorerFilteredData);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Raw Data Explorer View");
+            XLSX.writeFile(workbook, "raw_data_explorer_export.xlsx");
+        }
+
+        window.addEventListener('click', function(e) {
+            const colDropdown = document.getElementById('column-dropdown');
+            const expDropdown = document.getElementById('export-dropdown');
+            
+            if (colDropdown && !colDropdown.contains(e.target) && !e.target.closest("button[onclick*='toggleColumnDropdown']")) {
+                colDropdown.classList.add('hidden');
+            }
+            if (expDropdown && !expDropdown.contains(e.target) && !e.target.closest("#btn-export")) {
+                expDropdown.classList.add('hidden');
+            }
+        });
+    </script>
+</body>
+</html>
